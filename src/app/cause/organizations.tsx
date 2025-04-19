@@ -5,7 +5,7 @@ import useInfiniteScroll from "@/hooks/use-infinite-scroll";
 import { fetchApi } from "@/lib/utils";
 import type { Organization } from "@prisma/client";
 import Image from "next/image";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type OrganizationsData = {
   data: Organization[];
@@ -14,14 +14,77 @@ type OrganizationsData = {
 
 type OrganizationsProps = {
   initialData?: OrganizationsData;
-  search?: string;
+  search: string;
   category?: string;
 };
 
-export default function Organizations({ initialData }: OrganizationsProps) {
+export default function Organizations({
+  initialData,
+  search = "",
+}: OrganizationsProps) {
   const [organizations, setOrganizations] = useState<
     OrganizationsData | undefined
   >(initialData);
+
+  const controllerRef = useRef<AbortController | null>(null);
+
+  const fetchOrganizations = useCallback(
+    async (
+      params: Record<string, string | null | undefined>,
+      append = false,
+    ) => {
+      controllerRef.current?.abort("Aborting previous request");
+
+      const controller = new AbortController();
+      controllerRef.current = controller;
+
+      const { data, nextCursor } = await fetchApi<OrganizationsData>(
+        "/api/organizations",
+        { params, signal: controller.signal },
+      );
+
+      if (controller.signal.aborted) {
+        return;
+      }
+
+      setOrganizations((prev) => ({
+        data: append ? (prev?.data ?? []).concat(data) : data,
+        nextCursor,
+      }));
+
+      return { data, nextCursor };
+    },
+    [],
+  );
+
+  const prevSearch = useRef<string | undefined>("");
+  const searchCache = useRef<Record<string, OrganizationsData>>({});
+  const [isSearching, setIsSearching] = useState(prevSearch.current !== search);
+
+  useEffect(() => {
+    if (prevSearch.current === search) {
+      return;
+    }
+
+    if (searchCache.current[search]) {
+      setOrganizations(searchCache.current[search]);
+      prevSearch.current = search;
+      return;
+    }
+
+    setIsSearching(true);
+
+    fetchOrganizations({ q: search })
+      .then((res) => {
+        if (res) {
+          searchCache.current[search] = res;
+        }
+
+        prevSearch.current = search;
+        setIsSearching(false);
+      })
+      .catch(console.log);
+  }, [fetchOrganizations, initialData, search]);
 
   const hasMore = Boolean(organizations?.nextCursor);
 
@@ -30,18 +93,44 @@ export default function Organizations({ initialData }: OrganizationsProps) {
       return;
     }
 
-    const { data, nextCursor } = await fetchApi<{
-      data: Organization[];
-      nextCursor: string | null;
-    }>(`/api/organizations?created-at=${organizations.nextCursor}`);
-
-    setOrganizations((prev) => ({
-      data: (prev?.data ?? []).concat(data),
-      nextCursor,
-    }));
-  }, [hasMore, organizations]);
+    try {
+      await fetchOrganizations(
+        { q: search, "created-at": organizations.nextCursor },
+        true,
+      );
+    } catch (error) {
+      console.log(error);
+    }
+  }, [fetchOrganizations, hasMore, organizations, search]);
 
   const { targetRef, isLoading } = useInfiniteScroll({ loadMore, hasMore });
+
+  if (isSearching) {
+    return (
+      <div className="flex h-[calc(100vh-11rem)] items-center justify-center">
+        <Loader />
+      </div>
+    );
+  }
+
+  if (!isSearching && organizations?.data.length === 0) {
+    return (
+      <div className="flex h-[calc(100vh-24rem)] flex-col items-center justify-center">
+        <Image
+          className=""
+          src="/no-data.svg"
+          alt="no-data"
+          width={144}
+          height={144}
+        />
+
+        <p className="text-xl leading-8 text-black/90">查無相關資料</p>
+        <p className="text-sm leading-6 font-normal text-black/50">
+          請調整關鍵字再重新查詢
+        </p>
+      </div>
+    );
+  }
 
   return (
     <>
