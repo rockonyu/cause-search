@@ -10,7 +10,9 @@
     "lint": "next lint",
     "prisma:generate": "prisma generate",
     "prisma:migrate:dev": "prisma migrate dev",
-    "prisma:seed": "prisma db seed"
+    "prisma:seed": "prisma db seed",
+    "test:e2e": "cross-env IS_PLAYWRIGHT=true playwright test --headed",
+    "test:e2e:codegen": "playwright codegen"
   },
   "dependencies": {
     "@prisma/client": "^6.6.0",
@@ -23,6 +25,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@faker-js/faker": "^9.7.0",
+    "@playwright/test": "^1.52.0",
     "@tailwindcss/postcss": "^4",
     "@types/express": "^5.0.1",
     "@types/node": "^20.17.30",
