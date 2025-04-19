@@ -13,14 +13,34 @@ export const getBaseUrl = () => {
   return "";
 };
 
+export const toQueryString = <
+  T extends Record<string, string | undefined | null>,
+>(
+  obj: T,
+): string => {
+  const cleaned = Object.fromEntries(
+    Object.entries(obj).filter(([, value]) => value != null && value !== ""),
+  ) as Record<string, string>;
+
+  const searchParams = new URLSearchParams(cleaned).toString();
+  return searchParams ? `?${searchParams}` : "";
+};
+
 export const fetchApi = async <T>(
   endpoint: string,
-  options?: RequestInit,
+  options: RequestInit & {
+    params: Record<string, string | null | undefined>;
+  } = { params: {} },
 ): Promise<T> => {
-  const res = await fetch(`${getBaseUrl()}${endpoint}`, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
+  const { params, ...restOptions } = options;
+
+  const res = await fetch(
+    `${getBaseUrl()}${endpoint}${toQueryString(params)}`,
+    {
+      headers: { "Content-Type": "application/json" },
+      ...restOptions,
+    },
+  );
 
   if (!res.ok) {
     throw new Error(`API error: ${res.status}`);
